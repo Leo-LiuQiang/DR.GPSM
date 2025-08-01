@@ -1,11 +1,46 @@
 Package: DR.GPSM
-Title: What the Package Does (One Line, Title Case)
-Version: 0.0.0.9000
-Authors@R: 
-    person("First", "Last", , "first.last@example.com", role = c("aut", "cre"))
-Description: What the package does (one paragraph).
-License: `use_mit_license()`, `use_gpl3_license()` or friends to pick a
-    license
+Title: Doubly-Robust Generalized Propensity Score Matching for Multiple Treatments
+Version: 0.0.1
+Authors@R: c(
+  person(given  = "Yuan",
+         family = "Liu",
+         email  = "yuan.liu@emory.edu",
+         role   = "aut"),
+  person(given  = "Mingrui",
+         family = "Zhang",
+         email  = "mzha322@emory.edu",
+         role   = "aut"),
+  person(given  = "Qiang",
+         family = "Liu",
+         email  = "leo.liu3@emory.edu",
+         role   = c("aut", "cre"))
+  )
+Description: Implements the Balance-based Generalized Propensity Score Matching (BGPSM) framework for estimating average treatment effects (ATE) in observational studies with two or more treatment groups. The package provides tools to: 
+    (1) estimate generalized propensity scores (GPS) using multiple modeling options 
+    (multinomial logistic regression, random forest, gradient boosting, or GAM); 
+    (2) perform balance-based matching across all treatment levels simultaneously; 
+    (3) optionally fit outcome models for doubly-robust bias correction; and 
+    (4) visualize GPS distributions. 
+    Designed for causal inference with multi-valued treatments, suitable for applications 
+    in epidemiology, health services research, and the social sciences.
+License: MIT + file LICENSE
 Encoding: UTF-8
+LazyData: true
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.2
+Imports: 
+    dplyr,
+    gbm,
+    ggplot2,
+    nnet,
+    randomForest,
+    RANN,
+    rlang,
+    scales,
+    stats,
+    tidyr,
+    tidyselect,
+    VGAM
+Suggests: 
+    testthat (>= 3.0.0)
+Config/testthat/edition: 3
