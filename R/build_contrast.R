@@ -24,11 +24,10 @@ build_contrast <- function(levels, ref = NULL)
 
   if (!is.null(ref)) {
     refCol <- match(ref, levels)
-    for (r in seq_len(nrow(mat)))
-      if (mat[r, refCol] == 0)
-        next
-    else if (mat[r, refCol] ==  1)
-      mat[r, ] <- -mat[r, ]
+    for (r in seq_len(nrow(mat))) {
+      if (mat[r, refCol] == 0) next
+      if (mat[r, refCol] == 1) mat[r, ] <- -mat[r, ]
+    }
   }
 
   rn <- character(nrow(mat))

@@ -5,19 +5,47 @@
 #' @param treatment_ref Reference treatment level (optional; default is the first level)
 #' @param covariate Numeric vector of covariate column indices
 #' @param gps_model Choice of GPS model: 'logit', 'rf', 'gbm', or 'gam'
+#' @param gps_params     Optional named list of hyperparameters per GPS model.
+#'                       For example: list(
+#'                          rf  = list(ntree=1000, mtry=3, sampsize=..., nodesize=2, maxnodes=..., nPerm=5),
+#'                          gbm = list(n.trees=4000, interaction.depth=4, shrinkage=0.01,
+#'                                cv.folds=5, n.minobsinnode=5, n.cores=2),
+#'                          logit = list(maxit=200, decay=1e-3, trace=FALSE),
+#'                          gam   = list(df_max=6, maxit=80, trace=FALSE))
 #'
 #' @return A data frame containing the original data plus estimated GPS columns (gps_) and log-transformed GPS columns (loggps_)
 #' @export
+#' @importFrom splines bs
 gps_pre_process <- function(data,
                             treatment,
                             treatment_ref = NULL,
                             covariate,
-                            gps_model=c("logit","rf","gbm","gam")){
+                            gps_model=c("logit","rf","gbm","gam"),
+                            gps_params = NULL
+                            ){
   # Column verification
   if (!is.numeric(treatment) || length(treatment) != 1)
     stop("`treatment` option must be single numeric column number")
   if (!is.numeric(covariate) || length(covariate) < 1)
     stop("`covariate` option must be numeric column numbers for more than one column")
+
+  # model parameter extraction
+  .merge_defaults <- function(defaults, user) {
+    if (is.null(user)) return(defaults)
+    stopifnot(is.list(user))
+    for (nm in names(user)) defaults[[nm]] <- user[[nm]]
+    defaults
+  }
+  .filter_to_formals <- function(fun, args) {
+    keep <- intersect(names(args), names(formals(fun)))
+    dropped <- setdiff(names(args), keep)
+    list(keep = args[keep], dropped = dropped)
+  }
+
+  get_user <- function(name) {
+    if (is.null(gps_params) || !is.list(gps_params)) return(NULL)
+    gps_params[[name]]
+  }
 
   p <- ncol(data)
   if (any(c(treatment, covariate) < 1 |
@@ -48,25 +76,30 @@ gps_pre_process <- function(data,
   if (gps_model == "logit") {
     form <-  stats::reformulate(cov_vars, response = trt_var)
 
-    fit  <- nnet::multinom(formula = form,
-                           data = data,
-                           trace = FALSE)
+    logit_def <- list(trace = FALSE)
+    logit_par <- .merge_defaults(logit_def, get_user("logit"))
+
+    filt <- .filter_to_formals(nnet::multinom, logit_par)
+
+    fit <- do.call(nnet::multinom, c(list(formula = form, data = data), filt$keep))
 
     gps  <-  stats::fitted(fit)
-    if (is.null(dim(gps))) {
-      gps <- cbind(1 - gps, gps)
-    } else if (ncol(gps) == 1) {
-      gps <- cbind(1 - gps, gps)
-    }
+
+    if (is.null(dim(gps)) || ncol(gps) == 1) gps <- cbind(1 - gps, gps)
   }
 
   # Random forest
   else if (gps_model == "rf") {
     form <-  stats::reformulate(cov_vars, response = trt_var)
 
-    fit <- randomForest::randomForest(formula = form,
-                                      data = data,
-                                      ntree = 500)
+    rf_def <- list(ntree = 500L, nodesize = 1L)
+
+    rf_par <- .merge_defaults(rf_def, get_user("rf"))
+
+    filt <- .filter_to_formals(randomForest::randomForest, rf_par)
+
+    fit <- do.call(randomForest::randomForest,
+                   c(list(formula = form, data = data), filt$keep))
 
     gps <- stats::predict(fit, type = "prob")
   }
@@ -75,33 +108,57 @@ gps_pre_process <- function(data,
   else if (gps_model == "gbm") {
     form <-  stats::reformulate(cov_vars, response = trt_var)
 
-    fit <- suppressWarnings(gbm::gbm(formula = form,
-                        data = data,
-                        distribution = "multinomial",
-                        n.trees = 3000,
-                        cv.folds = 5,
-                        interaction.depth = 3,
-                        shrinkage = 0.01,
-                        n.minobsinnode = 10,
-                        n.cores = 1,
-                        verbose = FALSE))
+    gbm_def <- list(
+      n.trees           = 3000L,
+      interaction.depth = 3L,
+      shrinkage         = 0.01,
+      cv.folds          = 5L,
+      n.minobsinnode    = 10L,
+      n.cores           = 1L,
+      verbose           = FALSE
+    )
+    gbm_par <- .merge_defaults(gbm_def, get_user("gbm"))
 
-    best_iter <- gbm::gbm.perf(fit, method = "cv", plot.it = FALSE)
+    filt <- .filter_to_formals(gbm::gbm, gbm_par)
+    fit <- suppressWarnings(do.call(gbm::gbm,
+                   c(list(formula = form,
+                          data    = data,
+                          distribution = "multinomial"),
+                     filt$keep)))
+
+    best_iter <- if (isTRUE(gbm_par$cv.folds > 1L)) {
+      gbm::gbm.perf(fit, method = "cv", plot.it = FALSE)
+    } else {
+      gbm_par$n.trees
+    }
 
     pred_arr <- gbm::predict.gbm(object  = fit,
                                  newdata = data,
                                  n.trees = best_iter,
                                  type = "response")
 
-    gps <- matrix(pred_arr[,,1], ncol = K, dimnames = list(NULL, levels(trt_fac)))
+    gps <- if (is.array(pred_arr) && length(dim(pred_arr)) == 3L) {
+      pred_arr[, , 1, drop = FALSE][, , 1]
+    } else {
+      as.matrix(pred_arr)
+    }
+    colnames(gps) <- levels(trt_fac)
   }
 
   # Generalized Additive Model
   else if (gps_model == "gam") {
-    smooth_terms <- paste0("s(",cov_vars,")", collapse = "+")
-    form <- stats::as.formula(
-      paste(trt_var, "~", smooth_terms),
-      env = asNamespace("VGAM"))
+    make_term <- function(v) {
+      x <- data[[v]]
+      u <- length(unique(x))
+      if (u <= 3L) {
+        return(v)
+      } else {
+        df_use <- min(5L, u - 1L)
+        return(sprintf("splines::bs(%s, df=%d)", v, df_use))
+      }
+    }
+    rhs <- vapply(cov_vars, make_term, character(1))
+    form <- stats::as.formula(paste(trt_var, "~", paste(rhs, collapse = " + ")))
 
     fit <- suppressWarnings(VGAM::vglm(formula = form,
                       family  = VGAM::multinomial(),

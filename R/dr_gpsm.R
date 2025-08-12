@@ -11,6 +11,13 @@
 #' @param nboot          Number of bootstrap replications (default = 500)
 #' @param hist           Logical; TRUE to save GPS histogram
 #' @param hist_path      Character string specifying file path (pdf, png, jpg) to save the histogram (used if hist = TRUE)
+#' @param gps_params     Optional named list of hyperparameters per GPS model.
+#'                       For example: list(
+#'                          rf  = list(ntree=1000, mtry=3, sampsize=..., nodesize=2, maxnodes=..., nPerm=5),
+#'                          gbm = list(n.trees=4000, interaction.depth=4, shrinkage=0.01,
+#'                                cv.folds=5, n.minobsinnode=5, n.cores=2),
+#'                          logit = list(maxit=200, decay=1e-3, trace=FALSE),
+#'                          gam   = list(df_max=6, maxit=80, trace=FALSE))
 #'
 #' @return A list with components:
 #' \describe{
@@ -29,28 +36,43 @@ dr_gpsm <- function(data,
                        folds = 2,
                        nboot = 500,
                        hist = FALSE,
-                       hist_path = NULL)
+                       hist_path = NULL,
+                       gps_params = NULL
+                    )
 {
   gps_model     <- match.arg(gps_model)
   outcome_model <- match.arg(outcome_model)
 
   # gps_pre_process
-  dat_processed <- gps_pre_process(data, treatment, treatment_ref, covariate, gps_model)
+  dat_processed <- gps_pre_process(data, treatment, treatment_ref, covariate, gps_model, gps_params = gps_params)
 
   # overlap histogram
-  if (hist == TRUE){
-    hist = gps_histogram(dat_processed)
-    ggplot2::ggsave(hist,file=hist_path,width=8,height=8)
+  if (isTRUE(hist)) {
+    if (is.null(hist_path)) stop("When hist=TRUE, please provide hist_path.")
+    p <- gps_histogram(dat_processed)
+    ggplot2::ggsave(filename = hist_path, plot = p, width = 8, height = 8)
   }
 
   ## making contrast matrix
-  trt_lev  <- levels(factor(data[[names(data)[treatment]]]))
+  trt_var  <- names(data)[treatment]
+  trt_lev  <- levels(dat_processed[[trt_var]])
   contrast <- build_contrast(trt_lev, ref = treatment_ref)
 
-  ## K-fold split
+  ## stratified K-fold split by treatment levels
   n <- nrow(dat_processed)
-  id <- sample.int(n)
-  folds_id <- split(id, rep(1:folds, length.out = n))
+  make_folds <- function(fac, K) {
+    stopifnot(is.factor(fac))
+    inds  <- split(seq_along(fac), fac)
+    folds <- vector("list", K)
+    for (ids in inds) {
+      ids <- sample(ids)
+      sp  <- split(ids, rep(1:K, length.out = length(ids)))
+      for (f in seq_len(K)) folds[[f]] <- c(folds[[f]], sp[[f]])
+    }
+    lapply(folds, sort)
+  }
+  trt_fac  <- dat_processed[[trt_var]]
+  folds_id <- make_folds(trt_fac, folds)
 
   ## Outcome matrixes
   est_mat <- cil_mat <- ciu_mat <- matrix(NA_real_,
@@ -89,7 +111,7 @@ dr_gpsm <- function(data,
     g <- gps_matching(dat_processed[test, , drop = FALSE],
                    treatment, outcome,
                    pred = pred_test[, test, drop = FALSE],
-                   contrast = contrast,nboot)
+                   contrast = contrast,nboot = nboot)
     est_mat[, f] <- g$estimate
     cil_mat[, f] <- g$ci_lower
     ciu_mat[, f] <- g$ci_upper

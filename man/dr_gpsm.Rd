@@ -15,7 +15,8 @@ dr_gpsm(
   folds = 2,
   nboot = 500,
   hist = FALSE,
-  hist_path = NULL
+  hist_path = NULL,
+  gps_params = NULL
 )
 }
 \arguments{
@@ -40,6 +41,14 @@ dr_gpsm(
 \item{hist}{Logical; TRUE to save GPS histogram}
 
 \item{hist_path}{Character string specifying file path (pdf, png, jpg) to save the histogram (used if hist = TRUE)}
+
+\item{gps_params}{Optional named list of hyperparameters per GPS model.
+For example: list(
+rf  = list(ntree=1000, mtry=3, sampsize=..., nodesize=2, maxnodes=..., nPerm=5),
+gbm = list(n.trees=4000, interaction.depth=4, shrinkage=0.01,
+cv.folds=5, n.minobsinnode=5, n.cores=2),
+logit = list(maxit=200, decay=1e-3, trace=FALSE),
+gam   = list(df_max=6, maxit=80, trace=FALSE))}
 }
 \value{
 A list with components:

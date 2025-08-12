@@ -22,7 +22,8 @@ gps_matching <- function(data,
                  nboot){
 
   n <- nrow(data)
-  tlevel <- levels(as.factor(data[, treatment]))
+  stopifnot(is.factor(data[[treatment]]))
+  tlevel <- levels(data[[treatment]])
   K <- length(tlevel)
 
   loggps_cols <- integer(K - 1L)
