@@ -9,7 +9,7 @@ gps_pre_process(
   treatment,
   treatment_ref = NULL,
   covariate,
-  gps_model = c("logit", "rf", "gbm", "gam"),
+  gps_model = c("logit", "gbm", "gam"),
   gps_params = NULL
 )
 }
@@ -26,11 +26,10 @@ gps_pre_process(
 
 \item{gps_params}{Optional named list of hyperparameters per GPS model.
 For example: list(
-rf  = list(ntree=1000, mtry=3, sampsize=..., nodesize=2, maxnodes=..., nPerm=5),
-gbm = list(n.trees=4000, interaction.depth=4, shrinkage=0.01,
-cv.folds=5, n.minobsinnode=5, n.cores=2),
 logit = list(maxit=200, decay=1e-3, trace=FALSE),
-gam   = list(df_max=6, maxit=80, trace=FALSE))}
+gam   = list(df_max=6, maxit=80, trace=FALSE),
+gbm = list(n.trees=4000, interaction.depth=4, shrinkage=0.01,
+cv.folds=5, n.minobsinnode=5, n.cores=2))}
 }
 \value{
 A data frame containing the original data plus estimated GPS columns (gps_) and log-transformed GPS columns (loggps_)

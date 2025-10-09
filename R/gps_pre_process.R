@@ -7,11 +7,10 @@
 #' @param gps_model Choice of GPS model: 'logit', 'rf', 'gbm', or 'gam'
 #' @param gps_params     Optional named list of hyperparameters per GPS model.
 #'                       For example: list(
-#'                          rf  = list(ntree=1000, mtry=3, sampsize=..., nodesize=2, maxnodes=..., nPerm=5),
-#'                          gbm = list(n.trees=4000, interaction.depth=4, shrinkage=0.01,
-#'                                cv.folds=5, n.minobsinnode=5, n.cores=2),
 #'                          logit = list(maxit=200, decay=1e-3, trace=FALSE),
-#'                          gam   = list(df_max=6, maxit=80, trace=FALSE))
+#'                          gam   = list(df_max=6, maxit=80, trace=FALSE),
+#'                          gbm = list(n.trees=4000, interaction.depth=4, shrinkage=0.01,
+#'                                cv.folds=5, n.minobsinnode=5, n.cores=2))
 #'
 #' @return A data frame containing the original data plus estimated GPS columns (gps_) and log-transformed GPS columns (loggps_)
 #' @export
@@ -20,7 +19,7 @@ gps_pre_process <- function(data,
                             treatment,
                             treatment_ref = NULL,
                             covariate,
-                            gps_model=c("logit","rf","gbm","gam"),
+                            gps_model=c("logit","gbm","gam"),
                             gps_params = NULL
                             ){
   # Column verification
@@ -86,22 +85,6 @@ gps_pre_process <- function(data,
     gps  <-  stats::fitted(fit)
 
     if (is.null(dim(gps)) || ncol(gps) == 1) gps <- cbind(1 - gps, gps)
-  }
-
-  # Random forest
-  else if (gps_model == "rf") {
-    form <-  stats::reformulate(cov_vars, response = trt_var)
-
-    rf_def <- list(ntree = 500L, nodesize = 1L)
-
-    rf_par <- .merge_defaults(rf_def, get_user("rf"))
-
-    filt <- .filter_to_formals(randomForest::randomForest, rf_par)
-
-    fit <- do.call(randomForest::randomForest,
-                   c(list(formula = form, data = data), filt$keep))
-
-    gps <- stats::predict(fit, type = "prob")
   }
 
   # Generalized Boosted Models

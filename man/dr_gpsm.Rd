@@ -10,13 +10,18 @@ dr_gpsm(
   treatment_ref = NULL,
   covariate,
   outcome,
-  gps_model = c("logit", "rf", "gbm", "gam"),
-  outcome_model = c("none", "lm", "rf"),
+  gps_model = c("logit", "gbm", "gam"),
+  outcome_model = c("none", "lm", "rf", "gbm", "gam"),
   folds = 2,
   nboot = 500,
   hist = FALSE,
   hist_path = NULL,
-  gps_params = NULL
+  gps_params = NULL,
+  outcome_params = NULL,
+  match_on = c("gps", "covariates"),
+  cov_distance = c("mahalanobis", "euclidean"),
+  standardize = FALSE,
+  match_ratio = 1L
 )
 }
 \arguments{
@@ -30,9 +35,9 @@ dr_gpsm(
 
 \item{outcome}{Column index of the outcome variable}
 
-\item{gps_model}{Choice of GPS model: 'logit', 'rf', 'gbm', or 'gam'}
+\item{gps_model}{Choice of GPS model: 'logit', 'gbm', or 'gam'}
 
-\item{outcome_model}{Choice of outcome model for doubly-robust adjustment: 'none', 'lm', or 'rf'}
+\item{outcome_model}{Choice of outcome model: 'none','lm','rf','gbm','gam'}
 
 \item{folds}{Number of folds for cross-fitting (default = 2)}
 
@@ -40,15 +45,26 @@ dr_gpsm(
 
 \item{hist}{Logical; TRUE to save GPS histogram}
 
-\item{hist_path}{Character string specifying file path (pdf, png, jpg) to save the histogram (used if hist = TRUE)}
+\item{hist_path}{File path (pdf/png/jpg) to save histogram if hist=TRUE}
 
-\item{gps_params}{Optional named list of hyperparameters per GPS model.
+\item{gps_params}{Optional named list of hyperparameters per GPS model}
+
+\item{outcome_params}{Optional named list of hyperparameters per outcome model
 For example: list(
-rf  = list(ntree=1000, mtry=3, sampsize=..., nodesize=2, maxnodes=..., nPerm=5),
-gbm = list(n.trees=4000, interaction.depth=4, shrinkage=0.01,
-cv.folds=5, n.minobsinnode=5, n.cores=2),
-logit = list(maxit=200, decay=1e-3, trace=FALSE),
-gam   = list(df_max=6, maxit=80, trace=FALSE))}
+lm    = list(),  # (unused; here for symmetry)
+rf    = list(ntree = 500, mtry = NULL, nodesize = 1),
+gbm   = list(n.trees=3000, interaction.depth=3, shrinkage=0.01,
+cv.folds=0, n.minobsinnode=10, n.cores=1, verbose=FALSE),
+gam   = list(df_max = 6, family = NULL, method = "REML")
+)}
+
+\item{match_on}{'gps' (default) or 'covariates'}
+
+\item{cov_distance}{For covariate matching: 'euclidean' or 'mahalanobis' (default 'mahalanobis')}
+
+\item{standardize}{If TRUE, center/scale covariate features before matching (default FALSE)}
+
+\item{match_ratio}{Integer ≥ 1; number of matches per unit per target group (default 1)}
 }
 \value{
 A list with components:

@@ -32,20 +32,6 @@ test_that("gps_pre_process errors on invalid treatment or covariate input", {
   expect_error(gps_pre_process(df, treatment=1, covariate=2:3, gps_model="logit"))
 })
 
-test_that("gps_pre_process works with rf model if randomForest installed", {
-  skip_if_not_installed("randomForest")
-
-  set.seed(123)
-  df <- data.frame(
-    trt = factor(rep(c("A","B"), each=30)),
-    x1  = rnorm(60),
-    x2  = runif(60)
-  )
-
-  out <- gps_pre_process(df, treatment=1, covariate=2:3, gps_model="rf")
-  expect_true(any(grepl("^gps_", names(out))))
-})
-
 test_that("gps_pre_process works with gbm model if gbm installed", {
   skip_if_not_installed("gbm")
 
