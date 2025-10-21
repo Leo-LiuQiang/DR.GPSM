@@ -73,16 +73,40 @@ dr_gpsm <- function(data,
   .merge_defaults <- function(defaults, user) { if (is.null(user)) return(defaults); stopifnot(is.list(user)); for (nm in names(user)) defaults[[nm]] <- user[[nm]]; defaults }
   .filter_to_formals <- function(fun, args) { keep <- intersect(names(args), names(formals(fun))); list(keep = args[keep], dropped = setdiff(names(args), keep)) }
   get_outcome_user <- function(name) { if (is.null(outcome_params) || !is.list(outcome_params)) return(NULL); outcome_params[[name]] }
-  .default_tc <- function() caret::trainControl(method="cv", number=5, classProbs=TRUE, summaryFunction=caret::multiClassSummary, savePredictions="final", allowParallel=TRUE)
+  `%||%` <- function(a,b) if (is.null(a)) b else a
+
+  # NEW: separate caret defaults for classification vs regression
+  .default_tc_cls <- function(summary = c("multi","two")) {
+    summary <- match.arg(summary)
+    caret::trainControl(
+      method = "cv", number = 5,
+      classProbs = TRUE,
+      summaryFunction = switch(summary,
+                               multi = caret::multiClassSummary,
+                               two   = caret::twoClassSummary
+      ),
+      savePredictions = "final",
+      allowParallel   = TRUE
+    )
+  }
+  .default_tc_reg <- function() {
+    caret::trainControl(
+      method = "cv", number = 5,
+      classProbs = FALSE,
+      summaryFunction = caret::defaultSummary, # RMSE/RSquared/MAE
+      savePredictions = "final",
+      allowParallel   = TRUE
+    )
+  }
+
   .validate_tunegrid <- function(method, grid) {
     mi <- caret::getModelInfo(method)[[method]]
     expected <- mi$parameters$parameter
     if (!is.data.frame(grid) || !setequal(colnames(grid), expected)) {
-      stop(sprintf('Invalid tuneGrid for method "%s"; please use getModelInfo("%s")$%s$parameters to get proper parameters for tuning', method, method, method))
+      stop(sprintf('Invalid tuneGrid for method "%s"; please use getModelInfo("%s")[[1]]$parameters to build the proper tuning grid', method, method))
     }
     invisible(TRUE)
   }
-  `%||%` <- function(a,b) if (is.null(a)) b else a
 
   ## -- args and preprocessing --
   gps_model     <- match.arg(gps_model)
@@ -98,7 +122,7 @@ dr_gpsm <- function(data,
     gps_model = gps_model,
     gps_params = gps_params,
     tune = gps_tune,
-    tune_control = gps_tune_control %||% .default_tc(),
+    tune_control = gps_tune_control %||% .default_tc_cls("multi"),  # classification CV for GPS
     tune_grids = gps_tune_grids,
     seed = gps_seed
   )
@@ -133,7 +157,11 @@ dr_gpsm <- function(data,
   outcome_var <- names(data)[outcome]
 
   y <- dat_processed[[outcome_var]]
-  is_binary <- { if (is.factor(y)) nlevels(y) == 2L else { u <- unique(stats::na.omit(y)); length(u) == 2L && all(sort(u) %in% c(0,1)) } }
+  is_binary <- {
+    if (is.factor(y)) nlevels(y) == 2L else {
+      u <- unique(stats::na.omit(y)); length(u) == 2L && all(sort(u) %in% c(0,1))
+    }
+  }
 
   ## -- cross-fitting loop --
   for (f in seq_along(folds_id)) {
@@ -156,17 +184,23 @@ dr_gpsm <- function(data,
 
                rf = {
                  if (isTRUE(outcome_tune)) {
-                   tc   <- outcome_tune_control %||% .default_tc()
+                   # choose correct trainControl
+                   tc <- if (!is_binary) {
+                     outcome_tune_control %||% .default_tc_reg()
+                   } else {
+                     outcome_tune_control %||% .default_tc_cls("two")
+                   }
                    grid <- outcome_tune_grids$rf
                    if (!is.null(grid)) .validate_tunegrid("rf", grid) else {
-                     grid <- expand.grid(mtry = floor(sqrt(length(cov_vars))) + c(-1,0,1))
-                     grid$mtry <- pmax(1, grid$mtry)
+                     grid <- expand.grid(mtry = pmax(1, floor(sqrt(length(cov_vars))) + c(-1,0,1)))
                      .validate_tunegrid("rf", grid)
                    }
                    function(df) {
                      yy <- df[[outcome_var]]
-                     is_cls <- is_binary
-                     if (is_cls) yy <- factor(yy, levels = c(0,1), labels = c("zero","one"))
+                     if (is_binary) {
+                       yy <- factor(yy, levels = c(1,0), labels = c("one","zero"))
+                       yy <- stats::relevel(yy, ref = "one") # positive class
+                     }
                      form <- stats::reformulate(cov_vars, response = outcome_var)
                      df2 <- df
                      df2[[outcome_var]] <- yy
@@ -174,7 +208,8 @@ dr_gpsm <- function(data,
                        form, data = df2,
                        method = "rf",
                        trControl = tc,
-                       tuneGrid  = grid
+                       tuneGrid  = grid,
+                       metric    = if (is_binary) "ROC" else "RMSE"
                      )
                    }
                  } else {
@@ -189,7 +224,12 @@ dr_gpsm <- function(data,
 
                gbm = {
                  if (isTRUE(outcome_tune)) {
-                   tc   <- outcome_tune_control %||% .default_tc()
+                   # choose correct trainControl
+                   tc <- if (!is_binary) {
+                     outcome_tune_control %||% .default_tc_reg()
+                   } else {
+                     outcome_tune_control %||% .default_tc_cls("two")
+                   }
                    grid <- outcome_tune_grids$gbm
                    if (!is.null(grid)) .validate_tunegrid("gbm", grid) else {
                      grid <- expand.grid(
@@ -202,8 +242,10 @@ dr_gpsm <- function(data,
                    }
                    function(df) {
                      yy <- df[[outcome_var]]
-                     is_cls <- is_binary
-                     if (is_cls) yy <- factor(yy, levels = c(0,1), labels = c("zero","one"))
+                     if (is_binary) {
+                       yy <- factor(yy, levels = c(1,0), labels = c("one","zero"))
+                       yy <- stats::relevel(yy, ref = "one")
+                     }
                      form <- stats::reformulate(cov_vars, response = outcome_var)
                      df2 <- df
                      df2[[outcome_var]] <- yy
@@ -211,7 +253,7 @@ dr_gpsm <- function(data,
                        form, data = df2,
                        method = "gbm",
                        distribution = if (is_binary) "bernoulli" else "gaussian",
-                       metric = if (is_binary) "logLoss" else "RMSE",
+                       metric = if (is_binary) "ROC" else "RMSE",
                        trControl = tc,
                        tuneGrid  = grid,
                        verbose   = FALSE
