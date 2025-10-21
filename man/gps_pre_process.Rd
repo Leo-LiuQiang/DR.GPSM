@@ -2,7 +2,7 @@
 % Please edit documentation in R/gps_pre_process.R
 \name{gps_pre_process}
 \alias{gps_pre_process}
-\title{Generalized Propensity Score Model fitting}
+\title{Generalized Propensity Score (GPS) Model Fitting}
 \usage{
 gps_pre_process(
   data,
@@ -10,30 +10,100 @@ gps_pre_process(
   treatment_ref = NULL,
   covariate,
   gps_model = c("logit", "gbm", "gam"),
-  gps_params = NULL
+  gps_params = NULL,
+  tune = FALSE,
+  tune_control = NULL,
+  tune_grids = NULL,
+  seed = 12345
 )
 }
 \arguments{
-\item{data}{Data frame containing treatment, covariates, and outcome variables}
+\item{data}{A \code{data.frame} containing the treatment, covariate, and outcome variables.}
 
-\item{treatment}{Column index of the treatment variable}
+\item{treatment}{A single numeric column index of the treatment variable in \code{data}.}
 
-\item{treatment_ref}{Reference treatment level (optional; default is the first level)}
+\item{treatment_ref}{An optional reference level for the treatment factor.
+If not specified, the first level of the treatment factor is used as the reference.}
 
-\item{covariate}{Numeric vector of covariate column indices}
+\item{covariate}{A numeric vector of column indices corresponding to the covariate variables.}
 
-\item{gps_model}{Choice of GPS model: 'logit', 'rf', 'gbm', or 'gam'}
+\item{gps_model}{A character string specifying the GPS estimation model to be used.
+Choices include:
+\itemize{
+\item \code{"logit"} – Multinomial logistic regression (via \pkg{nnet})
+\item \code{"gbm"} – Generalized boosted model (via \pkg{gbm})
+\item \code{"rf"} – Random forest (future extension)
+\item \code{"gam"} – Generalized additive model (via \pkg{VGAM})
+}}
 
-\item{gps_params}{Optional named list of hyperparameters per GPS model.
-For example: list(
-logit = list(maxit=200, decay=1e-3, trace=FALSE),
-gam   = list(df_max=6, maxit=80, trace=FALSE),
-gbm = list(n.trees=4000, interaction.depth=4, shrinkage=0.01,
-cv.folds=5, n.minobsinnode=5, n.cores=2))}
+\item{gps_params}{An optional named list of model-specific parameters.
+Each element corresponds to one model and is itself a list of hyperparameters.
+For example:
+\preformatted{
+  list(
+    logit = list(maxit = 200, decay = 1e-3, trace = FALSE),
+    gam   = list(df_max = 6, maxit = 80, trace = FALSE),
+    gbm   = list(n.trees = 4000, interaction.depth = 4,
+                 shrinkage = 0.01, cv.folds = 5,
+                 n.minobsinnode = 5, n.cores = 2)
+  )
+  }}
+
+\item{tune}{Logical; if \code{TRUE}, performs hyperparameter tuning using
+cross-validation through \pkg{caret::train}.}
+
+\item{tune_control}{Optional object created by \code{caret::trainControl()},
+specifying resampling and cross-validation options. If \code{NULL},
+a default 5-fold cross-validation setting is used.}
+
+\item{tune_grids}{An optional named list of tuning grids, each defined as
+a \code{data.frame} whose column names correspond to valid tuning parameters
+for the selected model. Use \code{caret::getModelInfo("<method>")} to view
+the allowed parameter names.}
+
+\item{seed}{Integer; random seed for reproducibility.}
 }
 \value{
-A data frame containing the original data plus estimated GPS columns (gps_) and log-transformed GPS columns (loggps_)
+A \code{data.frame} containing:
+\itemize{
+\item The original input data.
+\item Estimated GPS columns, named \code{gps_<treatment_level>}.
+\item Log-transformed GPS columns (log-odds ratios relative to the
+reference level), named \code{loggps_<treatment_level>}.
+}
 }
 \description{
-Generalized Propensity Score Model fitting
+This function estimates generalized propensity scores (GPS) for multi-level
+or continuous treatment settings using various machine learning or regression
+models. Supported GPS models include multinomial logistic regression (\code{logit}),
+generalized boosted models (\code{gbm}), and generalized additive models (\code{gam}).
+Optionally, the function can perform cross-validated hyperparameter tuning via
+the \pkg{caret} package when \code{tune = TRUE}.
+}
+\details{
+The function automatically clips predicted probabilities to \eqn{[10^{-6}, 1 - 10^{-6}]}
+to avoid numerical instability when computing log-ratios. When
+\code{tune = TRUE}, the function validates that the provided
+\code{tune_grids} contain only model-specific tuning parameters supported by
+\pkg{caret}. If invalid parameters are found, an informative message is returned
+indicating the correct parameter set.
+}
+\examples{
+\dontrun{
+gps_pre_process(
+  data = df,
+  treatment = 1,
+  covariate = 2:6,
+  gps_model = "gbm",
+  tune = TRUE,
+  tune_grids = list(
+    gbm = expand.grid(
+      n.trees = c(1000, 3000),
+      interaction.depth = c(2, 3),
+      shrinkage = c(0.01, 0.005),
+      n.minobsinnode = c(5, 10)
+    )
+  )
+)
+}
 }

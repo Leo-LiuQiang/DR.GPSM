@@ -21,7 +21,15 @@ dr_gpsm(
   match_on = c("gps", "covariates"),
   cov_distance = c("mahalanobis", "euclidean"),
   standardize = FALSE,
-  match_ratio = 1L
+  match_ratio = 1L,
+  gps_tune = FALSE,
+  gps_tune_control = NULL,
+  gps_tune_grids = NULL,
+  gps_seed = 2025,
+  outcome_tune = FALSE,
+  outcome_tune_control = NULL,
+  outcome_tune_grids = NULL,
+  outcome_seed = 2025
 )
 }
 \arguments{
@@ -45,18 +53,11 @@ dr_gpsm(
 
 \item{hist}{Logical; TRUE to save GPS histogram}
 
-\item{hist_path}{File path (pdf/png/jpg) to save histogram if hist=TRUE}
+\item{hist_path}{File path (pdf/png/jpg) to save histogram if hist = TRUE}
 
 \item{gps_params}{Optional named list of hyperparameters per GPS model}
 
-\item{outcome_params}{Optional named list of hyperparameters per outcome model
-For example: list(
-lm    = list(),  # (unused; here for symmetry)
-rf    = list(ntree = 500, mtry = NULL, nodesize = 1),
-gbm   = list(n.trees=3000, interaction.depth=3, shrinkage=0.01,
-cv.folds=0, n.minobsinnode=10, n.cores=1, verbose=FALSE),
-gam   = list(df_max = 6, family = NULL, method = "REML")
-)}
+\item{outcome_params}{Optional named list of hyperparameters per outcome model}
 
 \item{match_on}{'gps' (default) or 'covariates'}
 
@@ -64,16 +65,36 @@ gam   = list(df_max = 6, family = NULL, method = "REML")
 
 \item{standardize}{If TRUE, center/scale covariate features before matching (default FALSE)}
 
-\item{match_ratio}{Integer ≥ 1; number of matches per unit per target group (default 1)}
+\item{match_ratio}{Integer >= 1; number of matches per unit per target group (default 1)}
+
+\item{gps_tune}{Logical; if TRUE, enable caret tuning for GPS ('logit','gbm')}
+
+\item{gps_tune_control}{Optional \code{caret::trainControl()} for GPS tuning; default is 5-fold CV}
+
+\item{gps_tune_grids}{Optional named list of GPS tuning grids (e.g., \code{list(gbm = ..., logit = ...)})}
+
+\item{gps_seed}{Integer seed for GPS tuning and fitting (default 2025)}
+
+\item{outcome_tune}{Logical; if TRUE, enable caret tuning for outcome models ('rf','gbm')}
+
+\item{outcome_tune_control}{Optional \code{caret::trainControl()} for outcome tuning}
+
+\item{outcome_tune_grids}{Optional named list of outcome tuning grids (e.g., \code{list(rf = ..., gbm = ...)})}
+
+\item{outcome_seed}{Integer seed for outcome tuning and fitting (default 2025)}
 }
 \value{
 A list with components:
 \describe{
-\item{estimate}{Named numeric vector of doubly-robust ATE estimates for each contrast}
-\item{ci_lower}{Named numeric vector of lower 95\% confidence bounds}
-\item{ci_upper}{Named numeric vector of upper 95\% confidence bounds}
+\item{estimate}{Named numeric vector of doubly-robust ATE estimates for each contrast.}
+\item{ci_lower}{Named numeric vector of lower 95\% confidence bounds.}
+\item{ci_upper}{Named numeric vector of upper 95\% confidence bounds.}
 }
 }
 \description{
-Doubly-robust GPS matching estimator
+Implements a doubly-robust generalized propensity score (GPS) matching estimator
+with optional cross-fitting and bootstrap inference. GPS can be estimated via
+multinomial logistic regression, GBM, or VGAM-based GAM; outcome models can be
+fitted via LM, RF, GBM, or GAM. Both GPS and outcome models support optional
+caret-based hyperparameter tuning with parameter-grid validation.
 }
